@@ -8,10 +8,7 @@ while True:
     entrada = input("Você: ")
     if entrada.lower() in ["sair", "exit", "quit"]:
         break
-
-    stream = agente.responder(entrada, session_id="foo")
-    print(f"Assistente: ")
-    for chunk in stream:
-        print(chunk, end="", flush=True)
+    resposta = agente.responder(entrada, session_id=1)
+    print(f"Assistente: ", resposta.content)
     print("\n")
 print("Sessão encerrada.")
