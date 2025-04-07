@@ -29,6 +29,19 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
     return store[session_id]
 
 
+# Função para mostrar o histórico de mensagens (debug)
+def mostrar_historico(session_id: str):
+    historico = get_session_history(session_id)
+    if len(historico.messages) > 0:
+        print(f"Histórico de Mensagens da Sessão {session_id}:")
+        for i, mensagem in enumerate(historico.messages, start=1):
+            print(f"Mensagem {i} - {mensagem.type}:")
+            print(mensagem.content)
+            print("-" * 30)
+    else:
+        print(f"Sessão {session_id} não tem mensagens")
+
+
 """
 class StreamRunnable(Runnable[List[BaseMessage], Iterator[BaseMessage]]):
     def __init__(self, llm):
@@ -66,4 +79,5 @@ class ChatAgent:
             {"messages": mensagens},
             config={"configurable": {"session_id": session_id}},
         )
+        mostrar_historico(session_id)
         return resposta
