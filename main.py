@@ -1,12 +1,13 @@
 import streamlit as st
 from agents_ia.chat import ChatAgent
+from agents_ia.embedding import EmbeddingProcessor
 
 st.set_page_config(page_title="Chat com LLaMA3", page_icon="🐉")
 st.title("💬 Chatbot com LLaMA3")
 
-# Simular múltiplos chats
+# Estado inicial
 if "session_id" not in st.session_state:
-    st.session_state.session_id = 1
+    st.session_state.session_id = "1"
 
 if "chat_agent" not in st.session_state:
     st.session_state.chat_agent = ChatAgent()
@@ -14,11 +15,39 @@ if "chat_agent" not in st.session_state:
 if "chat_histories" not in st.session_state:
     st.session_state.chat_histories = {}
 
+if "last_uploaded_filename" not in st.session_state:
+    st.session_state.last_uploaded_filename = None
 
-# Sidebar para trocar de chat/sessão
+# Sidebar
 st.sidebar.title("Sessões de Chat")
 
-# Garante que o session_id atual é string
+# Upload de arquivos no topo
+uploaded_file = st.sidebar.file_uploader("📎 Envie um PDF ou CSV", type=["pdf", "csv"])
+if uploaded_file:
+    filename = uploaded_file.name
+
+    if filename != st.session_state.last_uploaded_filename:
+        st.session_state.last_uploaded_filename = filename
+
+        with st.sidebar:
+            with st.spinner("🔄 Vetorizando o arquivo..."):
+                # Criar novo retriever
+                processor = EmbeddingProcessor(
+                    file=uploaded_file,
+                    filename=filename,
+                    session_id=st.session_state.session_id,
+                )
+                retriever = processor.create_retriever()
+
+                # Atualizar agente com novo contexto
+                st.session_state.chat_agent = ChatAgent(retriever=retriever)
+
+            st.success(f"📚 Arquivo '{filename}' processado com sucesso!")
+            uploaded_file.close()
+            uploaded_file = None
+            st.session_state.last_uploaded_filename = None
+
+# Controle de sessões
 st.session_state.session_id = str(st.session_state.session_id)
 current_session_id = st.session_state.session_id
 
@@ -51,6 +80,7 @@ for msg in chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
+
 # Input do usuário
 prompt = st.chat_input("Digite sua mensagem...")
 if prompt:
@@ -59,15 +89,21 @@ if prompt:
     resposta = st.session_state.chat_agent.responder(
         prompt, session_id=current_session_id
     )
-    st.chat_message("assistant").markdown(resposta.content)
 
+    st.write("DEBUG: tipo de resposta:", type(resposta))
+    st.write("DEBUG: conteúdo:", resposta)
+
+    resposta_texto = (
+        resposta.get("answer") if isinstance(resposta, dict) else resposta.content
+    )
+    st.chat_message("assistant").markdown(resposta_texto)
     # Atualiza histórico dessa sessão
     if current_session_id not in st.session_state.chat_histories:
         st.session_state.chat_histories[current_session_id] = []
 
     st.session_state.chat_histories[current_session_id].append(
-        {"role": "user", "content": prompt}
+        {"role": "user", "content": resposta_texto}
     )
     st.session_state.chat_histories[current_session_id].append(
-        {"role": "assistant", "content": resposta.content}
+        {"role": "assistant", "content": resposta_texto}
     )

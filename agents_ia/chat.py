@@ -8,6 +8,11 @@ from langchain_core.chat_history import (
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from LLM.local_llm import LocalLLM
+from agents_ia.embedding import EmbeddingProcessor
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import MessagesPlaceholder
+from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 
 # Armazena o histórico por sessão
 store = {}
@@ -42,41 +47,87 @@ def mostrar_historico(session_id: str):
         print(f"Sessão {session_id} não tem mensagens")
 
 
-"""
-class StreamRunnable(Runnable[List[BaseMessage], Iterator[BaseMessage]]):
-    def __init__(self, llm):
-        self.llm = llm
-
-    def invoke(
-        self, messages: List[BaseMessage], config=None, **kwargs
-    ) -> Iterator[BaseMessage]:
-        # Chama o LLM local com as mensagens formatadas
-        return self.llm.invoke(messages_to_prompt(messages))
-
-    def stream(
-        self, messages: List[BaseMessage], config=None, **kwargs
-    ) -> Iterator[BaseMessage]:
-        return self.llm.stream(messages)
-"""
-
-
 class ChatAgent:
-    # Classe para o agente de chat que utiliza um LLM local
-    # O agente é responsável por gerenciar o histórico de mensagens e formatar as mensagens para o LLM Local
-    def __init__(self):
+    def __init__(self, retriever=None):
+        """
+        Se retriever for passado, usa RAG.
+        Caso contrário, usa apenas o LLM com histórico simples.
+        """
         self.local_llm = LocalLLM().llm
 
-        # Adiciona suporte a histórico
-        self.chat_with_history = RunnableWithMessageHistory(
-            runnable=RunnableLambda(lambda x: self.local_llm.invoke(x["messages"])),
-            get_session_history=get_session_history,
-            input_messages_key="messages",
+        if retriever:
+            self.rag_chain = self.build_rag_chain(retriever)
+            self.chat_with_history = RunnableWithMessageHistory(
+                self.rag_chain,
+                get_session_history,
+                input_messages_key="input",
+                history_messages_key="chat_history",
+                output_messages_key="answer",
+            )
+        else:
+            # fallback: só LLM com histórico
+            self.chat_with_history = RunnableWithMessageHistory(
+                runnable=RunnableLambda(lambda x: self.local_llm.invoke(x["messages"])),
+                get_session_history=get_session_history,
+                input_messages_key="messages",
+            )
+
+    def build_rag_chain(self, retriever):
+        contextualize_q_prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    (
+                        "Dado um histórico de conversa e a pergunta mais recente do usuário,"
+                        "que pode fazer referência ao contexto do histórico,"
+                        "formule uma pergunta independente que possa ser entendida"
+                        "sem depender do histórico da conversa. NÃO responda à pergunta,"
+                        "apenas reformule-a se necessário; caso contrário, retorne como está."
+                    ),
+                ),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ]
         )
 
+        history_aware_retriever = create_history_aware_retriever(
+            self.local_llm, retriever, contextualize_q_prompt
+        )
+
+        qa_prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    (
+                        "Você é um assistente para tarefas de perguntas e respostas. "
+                        "Use os seguintes trechos de contexto recuperado para responder "
+                        "a pergunta. Se você não souber a resposta, diga que não sabe. "
+                        "Use no máximo três frases e mantenha a resposta concisa."
+                        "\n\n"
+                        "{context}"
+                    ),
+                ),
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ]
+        )
+
+        question_answer_chain = create_stuff_documents_chain(self.local_llm, qa_prompt)
+
+        return create_retrieval_chain(history_aware_retriever, question_answer_chain)
+
     def responder(self, pergunta: str, session_id: int = 1):
-        mensagens: list[BaseMessage] = [HumanMessage(content=pergunta)]
+        """
+        Se usando RAG, input é 'input'
+        Caso contrário, input é 'messages'
+        """
+        if hasattr(self, "rag_chain"):
+            entrada = {"input": pergunta}
+        else:
+            entrada = {"messages": [HumanMessage(content=pergunta)]}
+
         resposta = self.chat_with_history.invoke(
-            {"messages": mensagens},
+            entrada,
             config={"configurable": {"session_id": session_id}},
         )
         mostrar_historico(session_id)
