@@ -1,9 +1,10 @@
 import streamlit as st
 from agents_ia.chat import ChatAgent
 from agents_ia.embedding import EmbeddingProcessor
+from agents_ia.loader import CustomLoader
 
 st.set_page_config(page_title="Chat com LLaMA3", page_icon="🐉")
-st.title("💬 Chatbot com LLaMA3")
+st.title("Chatbot com LLaMA3")
 
 # Estado inicial
 if "session_id" not in st.session_state:
@@ -22,30 +23,40 @@ if "last_uploaded_filename" not in st.session_state:
 st.sidebar.title("Sessões de Chat")
 
 # Upload de arquivos no topo
-uploaded_file = st.sidebar.file_uploader("📎 Envie um PDF ou CSV", type=["pdf", "csv"])
+uploaded_file = st.sidebar.file_uploader("Envie um PDF ou CSV", type=["pdf", "csv"])
 if uploaded_file:
     filename = uploaded_file.name
-
+    ext = filename.split(".")[-1].lower()
+    st.write("DEBUG: extenção arquivo:", ext)
     if filename != st.session_state.last_uploaded_filename:
         st.session_state.last_uploaded_filename = filename
 
         with st.sidebar:
-            with st.spinner("🔄 Vetorizando o arquivo..."):
-                # Criar novo retriever
-                processor = EmbeddingProcessor(
-                    file=uploaded_file,
-                    filename=filename,
-                    session_id=st.session_state.session_id,
-                )
-                retriever = processor.create_retriever()
+            with st.spinner("Vetorizando o arquivo..."):
+                if ext == "pdf":
+                    # Criar novo retriever
+                    loader = CustomLoader(file=uploaded_file, filename=filename)
+                    docs = loader.load()
+                    uploaded_file.close()
+                    processor = EmbeddingProcessor(
+                        data=docs,
+                        session_id=st.session_state.session_id,
+                    )
+                    # Precisa checar se é true para a sessão atual
+                    retriever = processor.create_retriever()
 
-                # Atualizar agente com novo contexto
-                st.session_state.chat_agent = ChatAgent(retriever=retriever)
-
-            st.success(f"📚 Arquivo '{filename}' processado com sucesso!")
-            uploaded_file.close()
-            uploaded_file = None
-            st.session_state.last_uploaded_filename = None
+                    # Atualizar agente com novo contexto
+                    st.session_state.chat_agent = ChatAgent(retriever=retriever)
+                    retriever = None
+                elif ext == "csv":
+                    # Criar novo agente com DataFrame
+                    loader = CustomLoader(file=uploaded_file, filename=filename)
+                    docs = loader.load()
+                    st.write("DEBUG: docs:", docs)
+                    # Atualizar agente com novo contexto
+                    st.session_state.chat_agent = ChatAgent(retriever=None)
+                    st.session_state.chat_agent.load_dataframe_tools(df=docs)
+            st.success(f"Arquivo '{filename}' processado com sucesso!")
 
 # Controle de sessões
 st.session_state.session_id = str(st.session_state.session_id)
@@ -90,7 +101,7 @@ if prompt:
         prompt, session_id=current_session_id
     )
 
-    st.write("DEBUG: tipo de resposta:", type(resposta))
+    # st.write("DEBUG: tipo de resposta:", type(resposta))
     st.write("DEBUG: conteúdo:", resposta)
 
     resposta_texto = (
@@ -102,7 +113,7 @@ if prompt:
         st.session_state.chat_histories[current_session_id] = []
 
     st.session_state.chat_histories[current_session_id].append(
-        {"role": "user", "content": resposta_texto}
+        {"role": "user", "content": prompt}
     )
     st.session_state.chat_histories[current_session_id].append(
         {"role": "assistant", "content": resposta_texto}

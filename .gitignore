@@ -175,4 +175,5 @@ cython_debug/
 
 *.gguf
 *.pdf
+*.csv
 chroma_storage

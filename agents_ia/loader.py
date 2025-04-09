@@ -1,6 +1,7 @@
 from langchain_community.document_loaders import UnstructuredPDFLoader, CSVLoader
 from pathlib import Path
 import tempfile
+import pandas as pd
 
 
 class CustomLoader:
@@ -32,5 +33,5 @@ class CustomLoader:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
             tmp.write(self.file.read())
             tmp.flush()
-            loader = CSVLoader(tmp.name)
-            return loader.load()
+            df = pd.read_csv(tmp.name)
+            return df

@@ -1,6 +1,5 @@
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from agents_ia.loader import CustomLoader
 from LLM.local_llm import EmbeddingLLM
 import os
 
@@ -8,14 +7,12 @@ import os
 class EmbeddingProcessor:
     def __init__(
         self,
-        file,
-        filename,
+        data,
         session_id: str,
         chunk_size: int = 5000,
         chunk_overlap: int = 200,
     ):
-        self.file = file
-        self.filename = filename
+        self.data = data
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.session_id = str(session_id)
@@ -32,7 +29,7 @@ class EmbeddingProcessor:
                 collection_name=self.collection_name,
             )
         else:
-            docs = CustomLoader(self.file, self.filename).load()
+            docs = self.data
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
             )

@@ -63,7 +63,9 @@ deactivate
 
 # Compilar o projeto
 
-Com todas as dependências instaladas. Execute o seguinte comando na raiz do projeto:
+Garanta que o Ollama esta sendo executado na sua máquina.
+
+Com todas as dependências instaladas e Ollama rodando. Execute o seguinte comando na raiz do projeto:
 
 ```bash
 streamlit run main.py
