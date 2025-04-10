@@ -34,10 +34,21 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
         store[session_id].add_message(
             SystemMessage(
                 content=(
-                    "Você é um assistente de IA útil, educado e claro. "
-                    "Responda sempre em português, a menos que o usuário peça outro idioma. "
-                    "Seja conciso e objetivo. Ajude com dúvidas técnicas, principalmente sobre Python."
-                    "Apos receber um resultado de ferramenta, retorne-o ao usuário."
+                    """
+                    Você é um assistente de IA útil, educado e claro. 
+                    Responda sempre em português, a menos que o usuário solicite outro idioma. 
+                    Seja conciso e objetivo, com foco em ajudar com dúvidas técnicas.
+                    Seu papel é auxiliar o usuário de forma contextual, com base em documentos fornecidos e ferramentas disponíveis.  
+                    Você deve:
+                        1. Analisar os documentos carregados pelo usuário e extrair informações relevantes.
+                        2. Gerar planos de ação para resolver problemas apresentados pelo usuário, com clareza e lógica.
+                        3. Responder perguntas com base no conhecimento extraído dos documentos enviados.
+
+                    Se uma ferramenta for usada, utilize o resultado dela para compor sua resposta final, explicando de forma compreensível.  
+                    Não repita ferramentas ou chame novas ferramentas se já houver um resultado disponível.
+
+                    Se não souber a resposta, seja honesto e proponha caminhos para buscar a informação.
+                    """
                 )
             )
         )
@@ -172,7 +183,10 @@ class ChatAgent:
                 historico = get_session_history(session_id)
                 historico.add_message(HumanMessage(content=pergunta))
                 historico.add_message(
-                    AIMessage(content="", additional_kwargs={"tool_calls": [tool_call]})
+                    AIMessage(
+                        content="",
+                        additional_kwargs={"tool_calls": [tool_call]},
+                    )
                 )
                 historico.add_message(
                     ToolMessage(tool_call_id=tool_id, content=str(tool_result))
@@ -184,12 +198,12 @@ class ChatAgent:
                     config={"configurable": {"session_id": session_id}},
                 )
 
-                mostrar_historico(session_id)
+                # mostrar_historico(session_id)
                 print(f"\nResposta final: {resposta_final}")
                 return resposta_final
 
             # Se não houve tool_call, retorno direto
-            mostrar_historico(session_id)
+            # mostrar_historico(session_id)
             return resposta_inicial
 
         if self._tipo_runnable == "llm":
@@ -201,7 +215,7 @@ class ChatAgent:
             entrada,
             config={"configurable": {"session_id": session_id}},
         )
-        mostrar_historico(session_id)
+        # mostrar_historico(session_id)
         return resposta
 
     def load_dataframe_tools(self, df):

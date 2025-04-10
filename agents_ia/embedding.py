@@ -9,7 +9,7 @@ class EmbeddingProcessor:
         self,
         data,
         session_id: str,
-        chunk_size: int = 5000,
+        chunk_size: int = 1000,
         chunk_overlap: int = 200,
     ):
         self.data = data
@@ -21,20 +21,24 @@ class EmbeddingProcessor:
         self.collection_name = f"session_{self.session_id}"
 
     def create_retriever(self):
+
+        docs = self.data
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
+        )
+        splits = splitter.split_documents(docs)
+        print(f"Total de splits: {len(splits)}")
+
         # Verifica se já existe diretório com dados persistidos
         if os.path.exists(self.persist_path):
+            # Abre o vetorstore existente e adiciona novos documentos
             vectorstore = Chroma(
                 embedding_function=self.embeddings,
                 persist_directory=self.persist_path,
                 collection_name=self.collection_name,
             )
+            vectorstore.add_documents(splits)
         else:
-            docs = self.data
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
-            )
-            splits = splitter.split_documents(docs)
-            print(f"📄 Total de splits: {len(splits)}")
 
             vectorstore = Chroma.from_documents(
                 documents=splits,
@@ -42,6 +46,5 @@ class EmbeddingProcessor:
                 collection_name=self.collection_name,
                 persist_directory=self.persist_path,
             )
-            vectorstore.persist()
 
-        return vectorstore.as_retriever()
+        return vectorstore.as_retriever(search_kwargs={"k": 5})

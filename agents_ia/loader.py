@@ -27,11 +27,32 @@ class CustomLoader:
             tmp.write(self.file.read())
             tmp.flush()
             loader = UnstructuredPDFLoader(tmp.name)
-            return loader.load()
+            docs = loader.load()
+            temp_path = tmp.name
+
+            try:
+                loader = UnstructuredPDFLoader(temp_path)
+                docs = loader.load()
+                for doc in docs:
+                    doc.metadata["source"] = self.filename
+                return docs
+
+            # Handle any exceptions that occur during loading
+            except Exception as e:
+                print(f"Erro ao carregar o PDF: {e}")
+                raise e
 
     def _load_csv(self):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
             tmp.write(self.file.read())
             tmp.flush()
-            df = pd.read_csv(tmp.name)
-            return df
+            temp_path = tmp.name
+
+            try:
+                df = pd.read_csv(temp_path)
+                return df
+
+            # Handle any exceptions that occur during loading
+            except Exception as e:
+                print(f"Erro ao carregar o CSV: {e}")
+                raise e
