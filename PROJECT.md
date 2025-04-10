@@ -65,8 +65,10 @@ deactivate
 
 Garanta que o Ollama esta sendo executado na sua máquina.
 
-Com todas as dependências instaladas e Ollama rodando. Execute o seguinte comando na raiz do projeto:
+Com todas as dependências instaladas e o Ollama em execução, compile e execute o arquivo `main.py` utilizando o comando abaixo:
 
 ```bash
-streamlit run main.py
+python main.py
 ```
+
+Se tudo estiver configurado corretamente, uma página com o chat do Streamlit será aberta no seu navegador.

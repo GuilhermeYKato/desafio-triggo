@@ -9,7 +9,7 @@ class EmbeddingProcessor:
         self,
         data,
         session_id: str,
-        chunk_size: int = 1000,
+        chunk_size: int = 1400,
         chunk_overlap: int = 200,
     ):
         self.data = data
@@ -47,4 +47,4 @@ class EmbeddingProcessor:
                 persist_directory=self.persist_path,
             )
 
-        return vectorstore.as_retriever(search_kwargs={"k": 5})
+        return vectorstore.as_retriever(search_kwargs={"k": 8})

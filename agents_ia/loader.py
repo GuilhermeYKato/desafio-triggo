@@ -34,7 +34,7 @@ class CustomLoader:
                 loader = UnstructuredPDFLoader(temp_path)
                 docs = loader.load()
                 for doc in docs:
-                    doc.metadata["source"] = self.filename
+                    doc.metadata["Arquivo"] = self.filename
                 return docs
 
             # Handle any exceptions that occur during loading

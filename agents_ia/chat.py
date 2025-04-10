@@ -22,37 +22,8 @@ import pandas as pd
 from langchain_experimental.tools import PythonAstREPLTool
 from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain_core.output_parsers.openai_tools import JsonOutputKeyToolsParser
-
-# Armazena o histórico por sessão
-store = {}
-
-
-# Função para buscar (ou criar) o histórico da sessão
-def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    if session_id not in store:
-        store[session_id] = InMemoryChatMessageHistory()
-        store[session_id].add_message(
-            SystemMessage(
-                content=(
-                    """
-                    Você é um assistente de IA útil, educado e claro. 
-                    Responda sempre em português, a menos que o usuário solicite outro idioma. 
-                    Seja conciso e objetivo, com foco em ajudar com dúvidas técnicas.
-                    Seu papel é auxiliar o usuário de forma contextual, com base em documentos fornecidos e ferramentas disponíveis.  
-                    Você deve:
-                        1. Analisar os documentos carregados pelo usuário e extrair informações relevantes.
-                        2. Gerar planos de ação para resolver problemas apresentados pelo usuário, com clareza e lógica.
-                        3. Responder perguntas com base no conhecimento extraído dos documentos enviados.
-
-                    Se uma ferramenta for usada, utilize o resultado dela para compor sua resposta final, explicando de forma compreensível.  
-                    Não repita ferramentas ou chame novas ferramentas se já houver um resultado disponível.
-
-                    Se não souber a resposta, seja honesto e proponha caminhos para buscar a informação.
-                    """
-                )
-            )
-        )
-    return store[session_id]
+from agents_ia.memory import get_session_history
+from langchain_core.output_parsers import StrOutputParser
 
 
 # Função para mostrar o histórico de mensagens (debug)
@@ -82,7 +53,7 @@ class ChatAgent:
             self.rag_chain = self.build_rag_chain(retriever)
             self.chat_with_history = RunnableWithMessageHistory(
                 self.rag_chain,
-                get_session_history,
+                get_session_history=get_session_history,
                 input_messages_key="input",
                 history_messages_key="chat_history",
                 output_messages_key="answer",
@@ -102,11 +73,10 @@ class ChatAgent:
                 (
                     "system",
                     (
-                        "Dado um histórico de conversa e a pergunta mais recente do usuário,"
-                        "que pode fazer referência ao contexto do histórico,"
-                        "formule uma pergunta independente que possa ser entendida"
-                        "sem depender do histórico da conversa. NÃO responda à pergunta,"
-                        "apenas reformule-a se necessário; caso contrário, retorne como está."
+                        "Você é um modelo que reformula perguntas de forma independente com base no histórico de chat. "
+                        "Receba a conversa até agora e uma nova pergunta, e devolva uma versão clara e autossuficiente da pergunta. "
+                        "Considere também o histórico anterior para manter coerência."
+                        "NÃO responda. Reformule apenas."
                     ),
                 ),
                 MessagesPlaceholder("chat_history"),
@@ -126,6 +96,7 @@ class ChatAgent:
                         "Você é um assistente para tarefas de perguntas e respostas. "
                         "Use os seguintes trechos de contexto recuperado para responder "
                         "a pergunta. Se você não souber a resposta, diga que não sabe. "
+                        "Considere também o histórico anterior para manter coerência."
                         "Use no máximo três frases e mantenha a resposta concisa."
                         "\n\n"
                         "{context}"
@@ -193,17 +164,18 @@ class ChatAgent:
                 )
 
                 # Etapa 5 - Envia de volta ao modelo para gerar resposta final
-                resposta_final = self.local_llm.invoke(
+                local_llm_csv = LocalLLM(temperature=0.3).llm
+                resposta_final = local_llm_csv.invoke(
                     historico.messages,
                     config={"configurable": {"session_id": session_id}},
                 )
 
-                # mostrar_historico(session_id)
+                mostrar_historico(session_id)
                 print(f"\nResposta final: {resposta_final}")
                 return resposta_final
 
             # Se não houve tool_call, retorno direto
-            # mostrar_historico(session_id)
+            mostrar_historico(session_id)
             return resposta_inicial
 
         if self._tipo_runnable == "llm":
@@ -215,7 +187,7 @@ class ChatAgent:
             entrada,
             config={"configurable": {"session_id": session_id}},
         )
-        # mostrar_historico(session_id)
+        mostrar_historico(session_id)
         return resposta
 
     def load_dataframe_tools(self, df):
