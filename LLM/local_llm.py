@@ -1,5 +1,8 @@
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from langchain.chat_models.base import BaseChatModel
+import os
+
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 
 
 class LocalLLM:
@@ -10,9 +13,18 @@ class LocalLLM:
         self.llm = self.get_model()
 
     def get_model(self) -> BaseChatModel:
-        return ChatOllama(
-            model=self.model_name, temperature=self.temperature, stream=True
-        )
+        try:
+            return ChatOllama(
+                model=self.model_name,
+                temperature=self.temperature,
+                stream=True,
+                base_url=OLLAMA_URL,
+            )
+        except Exception as e:
+            print(
+                f"Error loading model {self.model_name}, make sure you have installed the model and Ollama is running. \nError: {e}"
+            )
+            raise e
 
 
 class EmbeddingLLM:
@@ -22,4 +34,13 @@ class EmbeddingLLM:
         self.embedding_llm = self.get_model()
 
     def get_model(self):
-        return OllamaEmbeddings(model=self.model_name)
+        try:
+            return OllamaEmbeddings(
+                model=self.model_name,
+                base_url=OLLAMA_URL,
+            )
+        except Exception as e:
+            print(
+                f"Error loading model {self.model_name}, make sure you have installed the model and Ollama is running. \nError: {e}"
+            )
+            raise e

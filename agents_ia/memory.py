@@ -10,12 +10,21 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-# Armazena o histórico por sessão
+# Armazena o histórico de mensagens para cada sessão identificada por session_id
 store = {}
 
 
-# Função para buscar (ou criar) o histórico da sessão
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
+    """
+    Retorna o histórico de mensagens da sessão correspondente ao session_id.
+    Se a sessão ainda não existir, cria um novo histórico com uma mensagem inicial do sistema.
+
+    Parâmetros:
+    - session_id (str): Identificador único da sessão de chat.
+
+    Retorno:
+    - BaseChatMessageHistory: Objeto contendo o histórico de mensagens da sessão.
+    """
     if session_id not in store:
         store[session_id] = InMemoryChatMessageHistory()
         store[session_id].add_message(
@@ -43,7 +52,14 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
 
 def add_system_message(session_id: str, texto: str):
     """
-    Adiciona uma mensagem do sistema ao histórico da sessão.
+    Adiciona uma mensagem do sistema ao histórico da sessão. Se a sessão não existir, ela será criada.
+
+    Parâmetros:
+    - session_id (str): Identificador único da sessão de chat.
+    - texto (str): Conteúdo da mensagem do sistema a ser adicionada.
+
+    Retorno:
+    - None
     """
     if session_id not in store:
         get_session_history(session_id)

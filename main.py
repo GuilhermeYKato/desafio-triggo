@@ -15,7 +15,8 @@ def main():
         print(f"Pasta '{chroma_storage_path}' não encontrada.")
 
     # Rodar o script streamlit
-    subprocess.run(["streamlit", "run", "app.py"])
+    command = "streamlit run app.py"
+    subprocess.run(command, shell=True)
 
 
 if __name__ == "__main__":

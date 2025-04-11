@@ -12,6 +12,16 @@ class EmbeddingProcessor:
         chunk_size: int = 1400,
         chunk_overlap: int = 200,
     ):
+        """
+        Inicializa o processador de embeddings para uma sessão específica.
+
+        data: lista de documentos (Document) a serem processados.
+        session_id: identificador único da sessão, usado para nomear diretórios e coleções.
+        chunk_size: tamanho de cada chunk (em caracteres) após a divisão dos documentos.
+        chunk_overlap: número de caracteres sobrepostos entre chunks consecutivos.
+
+        return: None
+        """
         self.data = data
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -21,7 +31,14 @@ class EmbeddingProcessor:
         self.collection_name = f"session_{self.session_id}"
 
     def create_retriever(self):
+        """
+        Cria um retriever baseado em embeddings usando Chroma como vetorstore.
+        Os documentos são divididos em chunks antes da indexação.
+        Se já existir uma base persistida, ela é carregada e atualizada com os novos documentos.
 
+        return:
+            - retriever (VectorStoreRetriever): objeto capaz de recuperar documentos relevantes com base em similaridade vetorial.
+        """
         docs = self.data
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
@@ -29,9 +46,8 @@ class EmbeddingProcessor:
         splits = splitter.split_documents(docs)
         print(f"Total de splits: {len(splits)}")
 
-        # Verifica se já existe diretório com dados persistidos
         if os.path.exists(self.persist_path):
-            # Abre o vetorstore existente e adiciona novos documentos
+            # Carrega vetorstore existente e adiciona os novos documentos
             vectorstore = Chroma(
                 embedding_function=self.embeddings,
                 persist_directory=self.persist_path,
@@ -39,7 +55,7 @@ class EmbeddingProcessor:
             )
             vectorstore.add_documents(splits)
         else:
-
+            # Cria novo vetorstore a partir dos documentos
             vectorstore = Chroma.from_documents(
                 documents=splits,
                 embedding=self.embeddings,
@@ -47,4 +63,4 @@ class EmbeddingProcessor:
                 persist_directory=self.persist_path,
             )
 
-        return vectorstore.as_retriever(search_kwargs={"k": 8})
+        return vectorstore.as_retriever(search_kwargs={"k": 4})

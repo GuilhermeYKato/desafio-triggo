@@ -26,8 +26,14 @@ from agents_ia.memory import get_session_history
 from langchain_core.output_parsers import StrOutputParser
 
 
-# Função para mostrar o histórico de mensagens (debug)
 def mostrar_historico(session_id: str):
+    """
+    Exibe no console o histórico de mensagens de uma sessão específica.
+
+    session_id: string que identifica unicamente uma sessão.
+
+    return: None
+    """
     historico = get_session_history(session_id)
     if len(historico.messages) > 0:
         print(f"Histórico de Mensagens da Sessão {session_id}:")
@@ -42,32 +48,57 @@ def mostrar_historico(session_id: str):
 class ChatAgent:
     def __init__(self, retriever=None, df=None):
         """
-        Se retriever for passado, usa RAG.
-        Caso contrário, usa apenas o LLM com histórico simples.
+        Inicializa o agente de chat, com ou sem RAG.
+
+        retriever: objeto opcional para recuperação de contexto com embeddings (RAG).
+        df: dataframe opcional (não utilizado diretamente na inicialização).
+
+        return: None
         """
         self.local_llm = LocalLLM().llm
         self._tipo_runnable = "llm"
 
-        if retriever:
-            self._tipo_runnable = "rag"
-            self.rag_chain = self.build_rag_chain(retriever)
-            self.chat_with_history = RunnableWithMessageHistory(
-                self.rag_chain,
-                get_session_history=get_session_history,
-                input_messages_key="input",
-                history_messages_key="chat_history",
-                output_messages_key="answer",
-            )
-        else:
-            # fallback: só LLM com histórico
-            self._tipo_runnable = "llm"
-            self.chat_with_history = RunnableWithMessageHistory(
-                runnable=RunnableLambda(lambda x: self.local_llm.invoke(x["messages"])),
-                get_session_history=get_session_history,
-                input_messages_key="messages",
-            )
+        default_prompt = ChatPromptTemplate.from_messages(
+            [
+                MessagesPlaceholder("chat_history"),
+                ("human", "{input}"),
+            ]
+        )
+        chain = default_prompt | self.local_llm
+        self.chat_with_history = RunnableWithMessageHistory(
+            runnable=chain,
+            get_session_history=get_session_history,
+            input_messages_key="input",
+            history_messages_key="chat_history",
+        )
+
+    def trocar_para_rag(self, retriever):
+        """
+        Alterna o agente para o modo RAG (retrieval augmented generation),
+        com encadeamento de reformulação de perguntas e busca de contexto.
+
+        retriever: objeto de busca de documentos por similaridade vetorial.
+
+        return: None
+        """
+        self._tipo_runnable = "rag"
+        self.rag_chain = self.build_rag_chain(retriever)
+        self.chat_with_history = RunnableWithMessageHistory(
+            self.rag_chain,
+            get_session_history=get_session_history,
+            input_messages_key="input",
+            history_messages_key="chat_history",
+            output_messages_key="answer",
+        )
 
     def build_rag_chain(self, retriever):
+        """
+        Cria um encadeamento de RAG que contextualiza perguntas com base no histórico e documentos relevantes.
+
+        retriever: objeto para recuperação de documentos via embeddings.
+
+        return: Runnable: cadeia de execução que realiza RAG.
+        """
         contextualize_q_prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -93,13 +124,8 @@ class ChatAgent:
                 (
                     "system",
                     (
-                        "Você é um assistente para tarefas de perguntas e respostas. "
-                        "Use os seguintes trechos de contexto recuperado para responder "
-                        "a pergunta. Se você não souber a resposta, diga que não sabe. "
-                        "Considere também o histórico anterior para manter coerência."
-                        "Use no máximo três frases e mantenha a resposta concisa."
-                        "\n\n"
-                        "{context}"
+                        "Se a pergunta não estiver clara, faça perguntas adicionais para obter mais detalhes. "
+                        "Use o contexto abaixo para responder perguntas:\n\n{context}"
                     ),
                 ),
                 MessagesPlaceholder("chat_history"),
@@ -111,36 +137,34 @@ class ChatAgent:
 
         return create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
-    def responder(self, pergunta: str, session_id: int = 1):
+    def responder(self, pergunta: str, session_id: str):
         """
-        Se usando RAG, input é 'input'
-        Caso contrário, input é 'messages'
-        """
+        Envia uma pergunta ao modelo, considerando o tipo atual de execução (simples, RAG ou CSV).
 
+        pergunta: string com a pergunta do usuário.
+        session_id: identificador da sessão de chat.
+
+        return:
+            - resposta (string ou objeto AIMessage) gerada pelo modelo.
+        """
         if self._tipo_runnable == "csv":
-            # Etapa 1 - Envia a pergunta para o modelo
-            print(f"CSV")
             entrada = {"input": pergunta}
-            print(f"Entrada: {entrada}")
             resposta_inicial = self.chat_with_history.invoke(
                 entrada,
                 config={"configurable": {"session_id": session_id}},
             )
-            print(f"Resposta inicial: {resposta_inicial}")
-            # Etapa 2 - Verifica se o modelo chamou uma ferramenta
+
             tool_calls = (
                 resposta_inicial.tool_calls
                 if hasattr(resposta_inicial, "tool_calls")
                 else []
             )
-            print(f"Tool calls: {tool_calls}")
             if tool_calls:
                 tool_call = tool_calls[0]
                 tool_name = tool_call["name"]
                 tool_args = tool_call.get("args", {})
                 tool_id = tool_call["id"]
 
-                # Etapa 3 - Executa a ferramenta correspondente
                 tool_result = None
                 if tool_name == "python_repl_ast":
                     query = tool_args.get("query", "")
@@ -148,9 +172,7 @@ class ChatAgent:
                 elif tool_name.startswith("df"):
                     query = tool_name
                     tool_result = self.tool_csv.run(query)
-                print(f"Resultado da ferramenta: {tool_result}")
 
-                # Etapa 4 - Monta o histórico manual com ToolMessage
                 historico = get_session_history(session_id)
                 historico.add_message(HumanMessage(content=pergunta))
                 historico.add_message(
@@ -163,40 +185,39 @@ class ChatAgent:
                     ToolMessage(tool_call_id=tool_id, content=str(tool_result))
                 )
 
-                # Etapa 5 - Envia de volta ao modelo para gerar resposta final
                 local_llm_csv = LocalLLM(temperature=0.3).llm
                 resposta_final = local_llm_csv.invoke(
                     historico.messages,
                     config={"configurable": {"session_id": session_id}},
                 )
 
-                mostrar_historico(session_id)
-                print(f"\nResposta final: {resposta_final}")
                 return resposta_final
 
-            # Se não houve tool_call, retorno direto
-            mostrar_historico(session_id)
             return resposta_inicial
 
-        if self._tipo_runnable == "llm":
-            entrada = {"messages": [HumanMessage(content=pergunta)]}
-        else:
-            entrada = {"input": pergunta}
+        entrada = {"input": pergunta}
 
         resposta = self.chat_with_history.invoke(
             entrada,
             config={"configurable": {"session_id": session_id}},
         )
-        mostrar_historico(session_id)
         return resposta
 
     def load_dataframe_tools(self, df):
+        """
+        Configura ferramentas de análise de dados para interação com um DataFrame.
+        Ativa o modo CSV com suporte a execução de código Python para análise de dados.
+
+        df: pandas.DataFrame contendo os dados a serem analisados pelo agente.
+
+        return: None
+        """
         self._tipo_runnable = "csv"
         self.tool_csv = PythonAstREPLTool(locals={"df": df})
         llm_tool = self.local_llm.bind_tools(
             [self.tool_csv], tool_choice="python_repl_ast"
         )
-        system = f"""
+        system = """
             Você tem acesso ao DataFrame `df` para responder perguntas sobre os dados.
             - Utilize apenas o DataFrame `df` para responder às perguntas.
             - Use SOMENTE Python com pandas.
